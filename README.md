@@ -29,3 +29,39 @@ Then open http://localhost:8080
 ```
 docker pull ghcr.io/muhmmadmahmoud/ci-cd-task:staging
 ```
+
+## Screenshots
+
+### The pipeline working
+
+All the 4 stages finished with success.
+
+![pipeline](screenshots/1-pipeline.png)
+
+### The artifacts
+
+The jar file and the test reports are saved from stage 2.
+
+![artifacts](screenshots/2-artifacts.png)
+
+### The tests
+
+![tests](screenshots/3-tests.png)
+
+### The environment variables
+
+![env variables](screenshots/4-env-variables.png)
+
+### The container registry
+
+The image is pushed to GHCR with the tag `staging` and a tag with the commit id.
+
+![container registry](screenshots/5-container-registry.png)
+
+### The security gate stopping a bad Dockerfile
+
+I removed the version tag from the Dockerfile on purpose to test stage 3.
+Hadolint found the problem, stage 3 failed and stage 4 did not run, so the
+image was not pushed.
+
+![hadolint failed](screenshots/6-hadolint-failed.png)
