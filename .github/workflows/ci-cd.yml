@@ -1,0 +1,119 @@
+name: CI CD Pipeline
+
+on:
+  push:
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: muhmmadmahmoud/ci-cd-task
+  JAVA_VERSION: 17
+
+jobs:
+
+  validate:
+    name: Stage 1 - Validate
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Get the code from github
+        uses: actions/checkout@v4
+
+      - name: Install java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Run maven validate
+        run: mvn -B -DskipTests=true validate
+
+  build_test:
+    name: Stage 2 - Build and Test
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+
+      - name: Get the code from github
+        uses: actions/checkout@v4
+
+      - name: Install java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Run the tests
+        run: mvn -B test
+
+      - name: Build the jar file
+        run: mvn -B package
+
+      - name: Upload the jar file
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-jar
+          path: target/*.jar
+
+      - name: Upload the test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: target/surefire-reports/**
+
+  dockerfile_lint:
+    name: Stage 3 - Dockerfile Lint (Hadolint)
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Get the code from github
+        uses: actions/checkout@v4
+
+      - name: Check the Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+  docker_publish_staging:
+    name: Stage 4 - Push image to GHCR
+    runs-on: ubuntu-latest
+    needs: [build_test, dockerfile_lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+
+      - name: Get the code from github
+        uses: actions/checkout@v4
+
+      - name: Download the jar from stage 2
+        uses: actions/download-artifact@v4
+        with:
+          name: my-jar
+          path: .
+
+      - name: Rename the jar to app.jar
+        run: mv *.jar app.jar
+
+      - name: Get the short commit id
+        run: echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the image and push it
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ env.SHORT_SHA }}
